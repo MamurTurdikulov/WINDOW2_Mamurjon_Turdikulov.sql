@@ -1,30 +1,28 @@
-SELECT
-    c.customer_id,
-    c.customer_name,
-    s.sales_channel,
-    ROUND(SUM(s.total_sales), 2) AS total_sales
+WITH SubcategorySales AS (
+    SELECT
+        prod_subcategory,
+        sales_year,
+        SUM(sales) AS total_sales
+    FROM
+        your_sales_table
+    WHERE
+        sales_year IN (1998, 1999, 2000, 2001)
+    GROUP BY
+        prod_subcategory, sales_year
+),
+PreviousYearSales AS (
+    SELECT
+        prod_subcategory,
+        sales_year,
+        LAG(total_sales) OVER (PARTITION BY prod_subcategory ORDER BY sales_year) AS previous_year_sales
+    FROM
+        SubcategorySales
+)
+SELECT DISTINCT
+    s.prod_subcategory
 FROM
-    customers c
+    SubcategorySales s
 JOIN
-    sales s ON c.customer_id = s.customer_id
+    PreviousYearSales p ON s.prod_subcategory = p.prod_subcategory AND s.sales_year = p.sales_year
 WHERE
-    c.customer_id IN (
-        SELECT
-            customer_id
-        FROM
-            (
-                SELECT
-                    customer_id,
-                    ROW_NUMBER() OVER (PARTITION BY sales_year ORDER BY total_sales DESC) AS sales_rank
-                FROM
-                    sales
-                WHERE
-                    sales_year IN (1998, 1999, 2001)
-            ) ranked_sales
-        WHERE
-            sales_rank <= 300
-    )
-GROUP BY
-    c.customer_id, c.customer_name, s.sales_channel
-ORDER BY
-    s.sales_channel, total_sales DESC;
+    s.total_sales > COALESCE(p.previous_year_sales, 0);
